@@ -3,9 +3,11 @@
 
 // Pin definitions
 const int B_BUTTON = 14;       // Black player button
-const int W_BUTTON = 26;       // White player button
+const int W_BUTTON = 25;       // White player button
 const int CONTROL_BUTTON = 27; // Control button for start/pause
-const int BUZZER_PIN = 32;     // Buzzer pin (updated from 15 to 32)
+const int BUZZER_PIN = 4;      // Buzzer pin
+const int B_LED_PIN = 33;      // Black player LED
+const int W_LED_PIN = 32;      // White player LED
 
 // LCD setup
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -24,8 +26,20 @@ bool isRunning = false;
 bool isSetup = true;
 
 // Buzzer helper functions
-void playStartupBeep() {
-  for (int j = 0; j < 2; j++) {
+void playStartBeep() {
+  for (int j = 0; j < 1; j++) {  // Play once instead of twice
+    for (int i = 0; i < 50; i++) {
+      digitalWrite(BUZZER_PIN, HIGH);
+      delayMicroseconds(500);
+      digitalWrite(BUZZER_PIN, LOW);
+      delayMicroseconds(500);
+    }
+    delay(100);
+  }
+}
+
+void playPauseBeep() {
+  for (int j = 0; j < 2; j++) {  // Play twice when pausing
     for (int i = 0; i < 50; i++) {
       digitalWrite(BUZZER_PIN, HIGH);
       delayMicroseconds(500);
@@ -57,6 +71,14 @@ void playFinalSecondsBeep() {
 void setup() {
   // Initialize buzzer
   pinMode(BUZZER_PIN, OUTPUT);
+  
+  // Initialize player turn LEDs
+  pinMode(B_LED_PIN, OUTPUT);
+  pinMode(W_LED_PIN, OUTPUT);
+  
+  // Ensure white LED is ON and black LED is OFF at startup
+  digitalWrite(W_LED_PIN, HIGH);  // Explicitly turn on white LED
+  digitalWrite(B_LED_PIN, LOW);   // Ensure black LED is off
   
   // Initialize LCD
   lcd.init();
@@ -93,7 +115,7 @@ void loop() {
   } else {
     // Check if just started the game
     if (wasSetup && !isSetup) {
-      playStartupBeep(); // Beep twice when game starts
+      playStartBeep(); // Beep once when game starts
     }
     
     handleGame();
@@ -157,10 +179,19 @@ void handleSetup() {
 
 void handleGame() {
   static bool lastTurn = isWhiteTurn; // Track the last turn state
+  static bool wasRunning = false;     // Track previous running state
   
   if (digitalRead(CONTROL_BUTTON) == LOW) {
     isRunning = !isRunning;
     lastUpdateTime = millis();
+    
+    // Different beep patterns for start/unpause and pause
+    if (isRunning) {
+      playStartBeep();   // Single beep when starting/unpausing
+    } else {
+      playPauseBeep();   // Double beep when pausing
+    }
+    
     delay(200); // Debounce
   }
   
@@ -203,17 +234,17 @@ void handleGame() {
 }
 
 void displayTimes() {
-  // First line: Black's time
+  // First line: Player labels
   lcd.setCursor(0, 0);
-  lcd.print("B: ");
-  printFormattedTime(blackTime);
-  lcd.print("     "); // Clear remaining characters
+   lcd.print("  W       B");   
+  lcd.print("      ");        // Clear remaining characters if necessary
 
-  // Second line: White's time
+  // Second line: Player times
   lcd.setCursor(0, 1);
-  lcd.print("W: ");
-  printFormattedTime(whiteTime);
-  lcd.print("     "); // Clear remaining characters
+  printFormattedTime(whiteTime); 
+  lcd.print("   ");              // Space between times
+  printFormattedTime(blackTime); 
+  lcd.print("      ");           // Clear remaining characters if necessary
 }
 
 void updateTurnDisplay() {
@@ -223,9 +254,18 @@ void updateTurnDisplay() {
   lcd.setCursor(15, 1);
   lcd.print(" ");
   
-  // Set new turn marker
-  lcd.setCursor(15, isWhiteTurn ? 1 : 0);
-  lcd.print("*");
+  // Set new turn marker on LCD
+  // lcd.setCursor(15, isWhiteTurn ? 1 : 0);
+  // lcd.print("*");
+  
+  // Update LED indicators
+  if (isWhiteTurn) {
+    digitalWrite(W_LED_PIN, HIGH);
+    digitalWrite(B_LED_PIN, LOW);
+  } else {
+    digitalWrite(B_LED_PIN, HIGH);
+    digitalWrite(W_LED_PIN, LOW);
+  }
 }
 
 void printFormattedTime(unsigned long timeInMs) {
@@ -257,6 +297,10 @@ void gameOver() {
   } else {
     lcd.print("White Wins!");
   }
+  
+  // Turn off both LEDs
+  digitalWrite(B_LED_PIN, LOW);
+  digitalWrite(W_LED_PIN, LOW);
   
   // Wait for control button to restart
   while (digitalRead(CONTROL_BUTTON) == HIGH) {
